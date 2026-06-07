@@ -1,0 +1,9 @@
+.env
+.env.*
+.git
+.gitignore
+dist
+node_modules
+npm-debug.log*
+Dockerfile
+render.yaml
