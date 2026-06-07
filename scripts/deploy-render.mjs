@@ -132,7 +132,7 @@ function buildEnvVars() {
     .map(([key, value]) => ({ key, value: String(value) }));
 }
 
-async function createService(envVars) {
+async function createService() {
   return request("/services", {
     method: "POST",
     body: JSON.stringify({
@@ -142,19 +142,15 @@ async function createService(envVars) {
       repo: REPO_URL,
       branch: "main",
       autoDeploy: "yes",
-      envVars,
       serviceDetails: {
         runtime: "node",
-        env: "node",
         region: "ohio",
         plan: "starter",
-        numInstances: 1,
         healthCheckPath: "/phone-agent/twilio/status",
         envSpecificDetails: {
           buildCommand: "npm ci && npm run build",
           startCommand: "npm run start:prod",
         },
-        ipAllowList: [{ cidrBlock: "0.0.0.0/0", description: "everywhere" }],
       },
     }),
   });
@@ -200,15 +196,15 @@ let service = services.find((entry) => entry.name === SERVICE_NAME);
 let created = false;
 
 if (!service) {
-  const response = await createService(envVars);
+  const response = await createService();
   service = response.service;
   created = true;
 } else {
   service = await updateService(service.id);
-  await replaceEnvVars(service.id, envVars);
 }
 
-const deploy = created ? { deploy: { id: service.deployId, status: "created_with_service" } } : await triggerDeploy(service.id);
+await replaceEnvVars(service.id, envVars);
+const deploy = await triggerDeploy(service.id);
 
 console.log(
   JSON.stringify(
@@ -218,7 +214,7 @@ console.log(
       url: service.serviceDetails?.url || SERVICE_URL,
       dashboardUrl: service.dashboardUrl,
       created,
-      deployId: deploy.deploy?.id ?? service.deployId ?? null,
+      deployId: deploy?.deploy?.id ?? service.deployId ?? null,
       envVarCount: envVars.length,
     },
     null,

@@ -20,6 +20,8 @@
     "express": "^5.2.1",
     "google-auth-library": "^9.15.1",
     "lucide-react": "^0.561.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "smol-toml": "^1.5.0",
     "twilio": "^6.0.2",
     "vite": "^8.0.14",
@@ -33,8 +35,6 @@
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
-    "react": "^19.2.1",
-    "react-dom": "^19.2.1",
     "typescript": "^5.9.3"
   }
 }
