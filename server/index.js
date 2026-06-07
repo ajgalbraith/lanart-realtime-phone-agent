@@ -8,6 +8,7 @@ import express from "express";
 import twilio from "twilio";
 import WebSocket, { WebSocketServer } from "ws";
 import { loadCodexMcpConfig } from "./codexConfig.js";
+import { callCloudTool, getCloudPublicTools, getCloudRealtimeTools, getCloudTool } from "./cloudTools.js";
 import { loadOpenAIKey, publicKeyStatus } from "./keyLoader.js";
 import { McpManager } from "./mcpManager.js";
 import { PhoneRealtimeBridge, registerAllowedPhoneCall } from "./phoneBridge.js";
@@ -142,7 +143,7 @@ class RealtimeBridge {
     sendJson(this.clientWs, {
       type: "mcp.status",
       servers: serverStates,
-      tools: this.mcp.getPublicTools(),
+      tools: [...this.mcp.getPublicTools(), ...getCloudPublicTools()],
     });
 
     this.openaiWs = new WebSocket(OPENAI_REALTIME_URL, {
@@ -193,7 +194,7 @@ class RealtimeBridge {
               voice: this.voice,
             },
           },
-          tools: this.mcp.getRealtimeTools(),
+          tools: [...this.mcp.getRealtimeTools(), ...getCloudRealtimeTools()],
           tool_choice: "auto",
           tracing: "auto",
           truncation: {
@@ -435,7 +436,15 @@ class RealtimeBridge {
     this.handledCalls.add(callId);
 
     const args = parseArguments(argumentsRaw);
-    const tool = this.mcp?.getTool(functionName);
+    const cloudTool = getCloudTool(functionName);
+    const tool = cloudTool
+      ? {
+          serverName: "cloud",
+          originalName: cloudTool.name,
+          requiresApproval: cloudTool.requiresApproval,
+          cloud: true,
+        }
+      : this.mcp?.getTool(functionName);
     if (!tool) {
       this.sendToolOutput(callId, JSON.stringify({ error: `Unknown tool: ${functionName}` }));
       this.createResponse(this.responseMode);
@@ -449,6 +458,7 @@ class RealtimeBridge {
       toolName: tool.originalName,
       args,
       requiresApproval: tool.requiresApproval,
+      cloud: tool.cloud === true,
     };
 
     if (tool.requiresApproval) {
@@ -480,7 +490,9 @@ class RealtimeBridge {
   async executeToolCall(request) {
     sendJson(this.clientWs, { type: "tool.started", request });
     try {
-      const output = await this.mcp.callTool(request.functionName, request.args);
+      const output = request.cloud
+        ? await callCloudTool(request.functionName, request.args)
+        : await this.mcp.callTool(request.functionName, request.args);
       sendJson(this.clientWs, {
         type: "tool.done",
         request,
@@ -566,6 +578,7 @@ app.get("/api/status", (_req, res) => {
     defaultSelectedMcpServers: DEFAULT_SELECTED_MCPS.filter((name) =>
       mcp.servers.some((server) => server.name === name && server.enabled),
     ),
+    cloudTools: getCloudPublicTools(),
   });
 });
 

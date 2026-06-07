@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import os from "node:os";
 import WebSocket from "ws";
 import { loadCodexMcpConfig } from "./codexConfig.js";
+import { callCloudTool, getCloudPublicTools, getCloudRealtimeTools, getCloudTool } from "./cloudTools.js";
 import { loadOpenAIKey } from "./keyLoader.js";
 import { MCP_CALL_ANY_TOOL_FUNCTION, MCP_LIST_AVAILABLE_TOOLS_FUNCTION, McpManager } from "./mcpManager.js";
 import { estimateRealtimeCost, estimateTranscriptionCost, REALTIME_MODEL } from "./pricing.js";
@@ -22,6 +23,7 @@ Security and safety:
 - This phone bridge only accepts calls from James's allowed caller ID.
 - Calls from the allowed number may use MCP tools, including tools that the dashboard labels approval-required.
 - If a needed MCP tool is not available as a direct function, use ${MCP_LIST_AVAILABLE_TOOLS_FUNCTION} to find it and ${MCP_CALL_ANY_TOOL_FUNCTION} to call it.
+- Cloud Gmail and Meta Ads tools are available even if local MCP commands are not available in production.
 - For irreversible or high-impact actions, first summarize the exact action and ask James to confirm before calling the tool. This includes purchases, refunds, deletions, account changes, outbound emails or messages, and ad budget or spend changes.
 - For Meta Ads budget changes, read the current campaign/ad/ad set data first, state the current spend or budget and the proposed new value, then wait for James's clear confirmation before making the change.
 - Never guess service domains. Verify official domains before using websites.
@@ -257,7 +259,7 @@ export class PhoneRealtimeBridge {
         type: "session.update",
         session: {
           type: "realtime",
-          tools: this.mcp.getRealtimeTools({ includeGeneric: true }),
+          tools: [...this.mcp.getRealtimeTools({ includeGeneric: true }), ...getCloudRealtimeTools()],
           tool_choice: "auto",
         },
       });
@@ -394,7 +396,16 @@ export class PhoneRealtimeBridge {
     const args = parseArguments(argumentsRaw);
 
     if (functionName === MCP_LIST_AVAILABLE_TOOLS_FUNCTION) {
-      this.sendToolOutput(callId, JSON.stringify(this.mcp?.getAllPublicTools(args) ?? { error: "MCP is not ready" }));
+      const cloudTools = getCloudPublicTools();
+      const mcpTools = this.mcp?.getAllPublicTools(args) ?? { totalConnectedTools: 0, matchedTools: 0, returnedTools: 0, tools: [] };
+      this.sendToolOutput(
+        callId,
+        JSON.stringify({
+          ...mcpTools,
+          cloudTools,
+          totalCloudTools: cloudTools.length,
+        }),
+      );
       this.createResponse();
       return;
     }
@@ -402,6 +413,22 @@ export class PhoneRealtimeBridge {
     if (functionName === MCP_CALL_ANY_TOOL_FUNCTION) {
       try {
         const output = await this.mcp.callOriginalTool(args.serverName, args.toolName, args.arguments ?? {});
+        this.sendToolOutput(callId, output);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.sendToolOutput(callId, JSON.stringify({ error: message }));
+      }
+      this.createResponse();
+      return;
+    }
+
+    const cloudTool = getCloudTool(functionName);
+    if (cloudTool) {
+      try {
+        console.log(
+          `[phone-agent] ${this.callSid ?? "call"} tool cloud/${cloudTool.name} approval=${cloudTool.requiresApproval ? "required" : "not-required"}`,
+        );
+        const output = await callCloudTool(functionName, args);
         this.sendToolOutput(callId, output);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
