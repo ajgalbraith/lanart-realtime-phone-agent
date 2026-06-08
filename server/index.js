@@ -69,6 +69,11 @@ function parseJson(data) {
   }
 }
 
+function rejectUpgrade(socket, statusCode, message) {
+  socket.write(`HTTP/1.1 ${statusCode} ${message}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+  socket.destroy();
+}
+
 function debugRealtime(...args) {
   if (DEBUG_REALTIME) console.log("[realtime]", ...args);
 }
@@ -736,12 +741,12 @@ server.on("upgrade", (request, socket, head) => {
   }
 
   if (!pathname.startsWith("/realtime")) {
-    socket.destroy();
+    rejectUpgrade(socket, 404, "Not Found");
     return;
   }
 
   if (!readSession(request)) {
-    socket.destroy();
+    rejectUpgrade(socket, 401, "Unauthorized");
     return;
   }
 
