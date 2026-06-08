@@ -1,9 +1,34 @@
 #!/usr/bin/env node
+import fs from "node:fs";
 import WebSocket from "ws";
 
-const BASE_URL = process.env.SMOKE_BASE_URL || "wss://lanart-realtime-phone-agent.onrender.com/realtime";
+const HTTP_BASE_URL = process.env.SMOKE_HTTP_BASE_URL || "https://lanart-realtime-phone-agent.onrender.com";
+const BASE_URL = process.env.SMOKE_BASE_URL || HTTP_BASE_URL.replace(/^http/, "ws") + "/realtime";
 const SMOKE_TOOL = process.env.SMOKE_TOOL || "meta";
 const TIMEOUT_MS = 45_000;
+
+function loadAuth() {
+  if (process.env.SMOKE_USERNAME && process.env.SMOKE_PASSWORD) {
+    return { username: process.env.SMOKE_USERNAME, password: process.env.SMOKE_PASSWORD };
+  }
+  const auth = JSON.parse(fs.readFileSync(".auth.local.json", "utf8"));
+  return { username: auth.username, password: auth.password };
+}
+
+async function loginCookie() {
+  const auth = loadAuth();
+  const response = await fetch(`${HTTP_BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(auth),
+  });
+  if (!response.ok) {
+    throw new Error(`Login failed: ${response.status} ${await response.text()}`);
+  }
+  const cookie = response.headers.get("set-cookie")?.split(";")[0];
+  if (!cookie) throw new Error("Login did not return a session cookie.");
+  return cookie;
+}
 
 function waitForOpen(ws) {
   return new Promise((resolve, reject) => {
@@ -13,7 +38,8 @@ function waitForOpen(ws) {
 }
 
 async function main() {
-  const ws = new WebSocket(BASE_URL);
+  const cookie = await loginCookie();
+  const ws = new WebSocket(BASE_URL, { headers: { Cookie: cookie } });
   const events = [];
   let assistantText = "";
   let toolStarted = 0;

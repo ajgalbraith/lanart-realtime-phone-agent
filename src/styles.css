@@ -38,6 +38,102 @@ button {
     #f4f2ee;
 }
 
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0)),
+    #f4f2ee;
+}
+
+.login-card {
+  width: min(420px, 100%);
+  border: 1px solid #ddd8ce;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 22px;
+  display: grid;
+  gap: 14px;
+}
+
+.login-mark {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #171717;
+  color: #fff;
+}
+
+.login-card h1,
+.login-card p {
+  margin: 0;
+}
+
+.login-card h1 {
+  font-size: 24px;
+}
+
+.login-card p {
+  color: #6a6862;
+  line-height: 1.45;
+}
+
+.login-card label {
+  display: grid;
+  gap: 6px;
+}
+
+.login-card label span {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.login-card label div {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #d4cfc5;
+  border-radius: 8px;
+  padding: 0 11px;
+  background: #fff;
+}
+
+.login-card input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #171717;
+}
+
+.login-card button {
+  height: 44px;
+  border: 1px solid #171717;
+  border-radius: 8px;
+  background: #171717;
+  color: #fff;
+  font-weight: 750;
+}
+
+.login-card button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.login-error {
+  border: 1px solid #ffd1d1;
+  background: #fff1f1;
+  color: #9f1d1d;
+  padding: 10px 11px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -120,6 +216,13 @@ button {
   background: #eefcf5;
 }
 
+.status-pill.authenticated {
+  color: #0f766e;
+  border-color: #9bd4bd;
+  background: #f1fbf8;
+  text-transform: none;
+}
+
 .status-pill.connecting {
   color: #a05a00;
   border-color: #e4c277;
@@ -135,6 +238,12 @@ button {
   border: 1px solid #171717;
   background: #171717;
   color: #fff;
+}
+
+.icon-button.secondary {
+  border-color: #d9d4ca;
+  background: #fff;
+  color: #171717;
 }
 
 .dashboard-grid {

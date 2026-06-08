@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import crypto from "node:crypto";
 import { URLSearchParams } from "node:url";
 import dotenv from "dotenv";
 import { loadTwilioConfig } from "../server/twilioConfig.js";
@@ -12,6 +13,7 @@ const REPO_URL = "https://github.com/ajgalbraith/lanart-realtime-phone-agent";
 const RENDER_KEY_PATHS = ["/Users/jamesgalbraith/code/label-printer/.env.prod", "/Users/jamesgalbraith/.render.env"];
 const EMAIL_ENV_PATH = "/Users/jamesgalbraith/code/lanart-mcp/google-workspace-email-mcp/.env";
 const META_ENV_PATH = "/Users/jamesgalbraith/.codex/mcp/meta-ads-mcp/.env";
+const AUTH_LOCAL_PATH = ".auth.local.json";
 
 function readEnvValue(raw, key) {
   const line = raw
@@ -34,6 +36,25 @@ function loadRenderApiKey() {
 function parseEnvFile(filePath) {
   if (!fs.existsSync(filePath)) throw new Error(`Missing env file: ${filePath}`);
   return dotenv.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function generatePassword() {
+  return crypto.randomBytes(18).toString("base64url");
+}
+
+function loadAuthSecrets() {
+  if (fs.existsSync(AUTH_LOCAL_PATH)) {
+    return JSON.parse(fs.readFileSync(AUTH_LOCAL_PATH, "utf8"));
+  }
+
+  const auth = {
+    username: "james",
+    password: generatePassword(),
+    sessionSecret: crypto.randomBytes(48).toString("base64url"),
+    createdAt: new Date().toISOString(),
+  };
+  fs.writeFileSync(AUTH_LOCAL_PATH, `${JSON.stringify(auth, null, 2)}\n`, { mode: 0o600 });
+  return auth;
 }
 
 function required(source, key) {
@@ -100,6 +121,7 @@ function buildEnvVars() {
   const twilio = loadTwilioConfig({ refresh: true });
   const emailEnv = parseEnvFile(EMAIL_ENV_PATH);
   const metaEnv = parseEnvFile(META_ENV_PATH);
+  const auth = loadAuthSecrets();
   const googleKeyFile = required(emailEnv, "GOOGLE_SERVICE_ACCOUNT_KEY_FILE");
   const googleKeyJson = JSON.stringify(JSON.parse(fs.readFileSync(googleKeyFile, "utf8")));
   const values = {
@@ -114,6 +136,9 @@ function buildEnvVars() {
     PHONE_AGENT_ALLOWED_FROM: "+14387870109",
     PHONE_AGENT_PUBLIC_BASE_URL: SERVICE_URL,
     PHONE_AGENT_MCP_SERVERS: "render,retell",
+    APP_AUTH_USERNAME: auth.username,
+    APP_AUTH_PASSWORD: auth.password,
+    APP_SESSION_SECRET: auth.sessionSecret,
     CODEX_MCP_CONFIG_JSON: buildMcpConfig(),
     RENDER_API_KEY: loadRenderApiKey(),
     RETELL_API_KEY: required(process.env, "RETELL_API_KEY"),
@@ -146,7 +171,7 @@ async function createService() {
         runtime: "node",
         region: "ohio",
         plan: "starter",
-        healthCheckPath: "/phone-agent/twilio/status",
+        healthCheckPath: "/healthz",
         envSpecificDetails: {
           buildCommand: "npm ci && npm run build",
           startCommand: "npm run start:prod",
@@ -165,7 +190,7 @@ async function updateService(serviceId) {
       repo: REPO_URL,
       serviceDetails: {
         runtime: "node",
-        healthCheckPath: "/phone-agent/twilio/status",
+        healthCheckPath: "/healthz",
         plan: "starter",
         envSpecificDetails: {
           buildCommand: "npm ci && npm run build",
@@ -216,6 +241,8 @@ console.log(
       created,
       deployId: deploy?.deploy?.id ?? service.deployId ?? null,
       envVarCount: envVars.length,
+      authUsername: loadAuthSecrets().username,
+      authPassword: loadAuthSecrets().password,
     },
     null,
     2,

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import twilio from "twilio";
 import WebSocket, { WebSocketServer } from "ws";
+import { clearSessionCookie, createSessionCookie, publicAuthStatus, readSession, requireAuth, verifyCredentials } from "./auth.js";
 import { loadCodexMcpConfig } from "./codexConfig.js";
 import { callCloudTool, getCloudPublicTools, getCloudRealtimeTools, getCloudTool } from "./cloudTools.js";
 import { loadOpenAIKey, publicKeyStatus } from "./keyLoader.js";
@@ -563,9 +564,43 @@ app.set("trust proxy", true);
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: false }));
 
+app.get("/healthz", (_req, res) => {
+  res.json({ ok: true });
+});
+
+app.get("/api/auth/status", (req, res) => {
+  res.json(publicAuthStatus(req));
+});
+
+app.post("/api/auth/login", (req, res) => {
+  const username = String(req.body?.username || "").trim();
+  const password = String(req.body?.password || "");
+  if (!verifyCredentials(username, password)) {
+    res.status(401).json({ error: "Invalid username or password." });
+    return;
+  }
+
+  const secure = req.secure || req.get("x-forwarded-proto") === "https";
+  res.setHeader("Set-Cookie", createSessionCookie(username, { secure }));
+  res.json({ authenticated: true, username });
+});
+
+app.post("/api/auth/logout", (_req, res) => {
+  res.setHeader("Set-Cookie", clearSessionCookie());
+  res.json({ authenticated: false });
+});
+
 if (fs.existsSync(distRoot)) {
   app.use(express.static(distRoot));
 }
+
+app.use("/api", (req, res, next) => {
+  if (req.path.startsWith("/auth/")) {
+    next();
+    return;
+  }
+  requireAuth(req, res, next);
+});
 
 app.get("/api/status", (_req, res) => {
   const mcp = loadCodexMcpConfig();
@@ -586,7 +621,7 @@ app.get("/api/phone/status", (req, res) => {
   res.json(publicTwilioStatus(req));
 });
 
-app.get(["/status", `${getPhoneAgentPaths().status}`], (req, res) => {
+app.get(["/status", `${getPhoneAgentPaths().status}`], requireAuth, (req, res) => {
   res.json(publicTwilioStatus(req));
 });
 
@@ -701,6 +736,11 @@ server.on("upgrade", (request, socket, head) => {
   }
 
   if (!pathname.startsWith("/realtime")) {
+    socket.destroy();
+    return;
+  }
+
+  if (!readSession(request)) {
     socket.destroy();
     return;
   }

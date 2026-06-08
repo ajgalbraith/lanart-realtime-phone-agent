@@ -6,7 +6,7 @@ services:
     plan: starter
     buildCommand: npm ci && npm run build
     startCommand: npm run start:prod
-    healthCheckPath: /phone-agent/twilio/status
+    healthCheckPath: /healthz
     envVars:
       - key: NODE_ENV
         value: production

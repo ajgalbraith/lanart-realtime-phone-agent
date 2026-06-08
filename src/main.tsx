@@ -7,6 +7,9 @@ import {
   CircleDollarSign,
   Gauge,
   Headphones,
+  KeyRound,
+  Lock,
+  LogOut,
   Mic,
   Pause,
   Plug,
@@ -15,6 +18,7 @@ import {
   ShieldCheck,
   Square,
   TerminalSquare,
+  User,
   Volume2,
   X,
 } from "lucide-react";
@@ -68,6 +72,12 @@ type PhoneStatusPayload = {
   phoneMcpServers: string[];
 };
 
+type AuthPayload = {
+  configured: boolean;
+  authenticated: boolean;
+  username: string | null;
+};
+
 type ChatMessage = {
   id: string;
   role: "user" | "assistant" | "system";
@@ -107,6 +117,11 @@ function nowId(prefix: string) {
 }
 
 function App() {
+  const [auth, setAuth] = React.useState<AuthPayload | null>(null);
+  const [loginUsername, setLoginUsername] = React.useState("james");
+  const [loginPassword, setLoginPassword] = React.useState("");
+  const [loginError, setLoginError] = React.useState("");
+  const [loginBusy, setLoginBusy] = React.useState(false);
   const [status, setStatus] = React.useState<StatusPayload | null>(null);
   const [phoneStatus, setPhoneStatus] = React.useState<PhoneStatusPayload | null>(null);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
@@ -142,33 +157,82 @@ function App() {
   const captureRef = React.useRef<AudioCapture | null>(null);
   const messagesEndRef = React.useRef<HTMLDivElement | null>(null);
 
-  React.useEffect(() => {
-    fetch("/api/status")
-      .then((res) => res.json())
-      .then((payload: StatusPayload) => {
-        setStatus(payload);
-        setSelected(new Set(payload.defaultSelectedMcpServers));
-      })
-      .catch((error) => {
-        addToolEvent("bad", "Status failed", error instanceof Error ? error.message : String(error));
-      });
-
-    fetch("/api/phone/status")
-      .then((res) => res.json())
-      .then((payload: PhoneStatusPayload) => {
-        setPhoneStatus(payload);
-      })
-      .catch((error) => {
-        addToolEvent("bad", "Phone status failed", error instanceof Error ? error.message : String(error));
-      });
+  const addToolEvent = React.useCallback((tone: ToolEvent["tone"], title: string, detail?: string) => {
+    setToolEvents((events) => [{ id: nowId("tool"), tone, title, detail }, ...events].slice(0, 80));
   }, []);
+
+  const loadDashboardStatus = React.useCallback(async () => {
+    try {
+      const statusRes = await fetch("/api/status", { credentials: "same-origin" });
+      if (statusRes.status === 401) {
+        setAuth((current) => ({ configured: current?.configured ?? true, authenticated: false, username: null }));
+        return;
+      }
+      if (!statusRes.ok) throw new Error(`Status failed: ${statusRes.status}`);
+      const payload = (await statusRes.json()) as StatusPayload;
+      setStatus(payload);
+      setSelected(new Set(payload.defaultSelectedMcpServers));
+    } catch (error) {
+      addToolEvent("bad", "Status failed", error instanceof Error ? error.message : String(error));
+    }
+
+    try {
+      const phoneRes = await fetch("/api/phone/status", { credentials: "same-origin" });
+      if (!phoneRes.ok) throw new Error(`Phone status failed: ${phoneRes.status}`);
+      setPhoneStatus((await phoneRes.json()) as PhoneStatusPayload);
+    } catch (error) {
+      addToolEvent("bad", "Phone status failed", error instanceof Error ? error.message : String(error));
+    }
+  }, [addToolEvent]);
+
+  React.useEffect(() => {
+    fetch("/api/auth/status", { credentials: "same-origin" })
+      .then((res) => res.json())
+      .then((payload: AuthPayload) => {
+        setAuth(payload);
+        if (payload.authenticated) void loadDashboardStatus();
+      })
+      .catch((error) => {
+        setAuth({ configured: false, authenticated: false, username: null });
+        setLoginError(error instanceof Error ? error.message : String(error));
+      });
+  }, [loadDashboardStatus]);
 
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  function addToolEvent(tone: ToolEvent["tone"], title: string, detail?: string) {
-    setToolEvents((events) => [{ id: nowId("tool"), tone, title, detail }, ...events].slice(0, 80));
+  async function submitLogin(event: React.FormEvent) {
+    event.preventDefault();
+    setLoginBusy(true);
+    setLoginError("");
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: loginUsername, password: loginPassword }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || `Login failed: ${response.status}`);
+      setAuth({ configured: true, authenticated: true, username: payload.username ?? loginUsername });
+      setLoginPassword("");
+      await loadDashboardStatus();
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoginBusy(false);
+    }
+  }
+
+  async function logout() {
+    disconnect();
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
+    setAuth({ configured: true, authenticated: false, username: null });
+    setStatus(null);
+    setPhoneStatus(null);
+    setMcpStates([]);
+    setMcpTools([]);
   }
 
   function selectedArray() {
@@ -454,6 +518,56 @@ function App() {
   const readyServers = mcpStates.filter((item) => item.status === "ready").length;
   const failedServers = mcpStates.filter((item) => item.status === "failed").length;
 
+  if (!auth) {
+    return (
+      <main className="login-shell">
+        <div className="login-card">
+          <TerminalSquare size={26} />
+          <h1>Lanart Realtime</h1>
+          <p>Checking session...</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!auth.authenticated) {
+    return (
+      <main className="login-shell">
+        <form className="login-card" onSubmit={submitLogin}>
+          <div className="login-mark">
+            <Lock size={24} />
+          </div>
+          <h1>Lanart Realtime</h1>
+          <p>Sign in to start a secure live voice session.</p>
+          {!auth.configured && <div className="login-error">Authentication is not configured on the server.</div>}
+          {loginError && <div className="login-error">{loginError}</div>}
+          <label>
+            <span>Username</span>
+            <div>
+              <User size={17} />
+              <input value={loginUsername} onChange={(event) => setLoginUsername(event.target.value)} autoComplete="username" />
+            </div>
+          </label>
+          <label>
+            <span>Password</span>
+            <div>
+              <KeyRound size={17} />
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(event) => setLoginPassword(event.target.value)}
+                autoComplete="current-password"
+              />
+            </div>
+          </label>
+          <button type="submit" disabled={loginBusy || !loginUsername.trim() || !loginPassword}>
+            {loginBusy ? "Signing in..." : "Sign in"}
+          </button>
+        </form>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell">
       <section className="topbar">
@@ -465,10 +579,18 @@ function App() {
           </div>
         </div>
         <div className="top-actions">
+          <div className="status-pill authenticated">
+            <ShieldCheck size={16} />
+            {auth.username ?? "signed in"}
+          </div>
           <div className={`status-pill ${connection}`}>
             <Activity size={16} />
             {connection}
           </div>
+          <button className="icon-button secondary" onClick={logout}>
+            <LogOut size={18} />
+            <span>Logout</span>
+          </button>
           <button className="icon-button" onClick={connection === "connected" ? disconnect : connect}>
             {connection === "connected" ? <Square size={18} /> : <Power size={18} />}
             <span>{connection === "connected" ? "Stop" : "Start"}</span>
