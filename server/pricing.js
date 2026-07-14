@@ -1,19 +1,19 @@
-export const REALTIME_MODEL = "gpt-realtime-2";
+export const REALTIME_MODEL = "gpt-realtime-2.1-mini";
 
-export const GPT_REALTIME_2_PRICING = {
+export const GPT_REALTIME_2_1_MINI_PRICING = {
   text: {
-    input: 4,
-    cachedInput: 0.4,
-    output: 24,
+    input: 0.6,
+    cachedInput: 0.06,
+    output: 2.4,
   },
   audio: {
-    input: 32,
-    cachedInput: 0.4,
-    output: 64,
+    input: 10,
+    cachedInput: 0.3,
+    output: 20,
   },
   image: {
-    input: 5,
-    cachedInput: 0.5,
+    input: 0.8,
+    cachedInput: 0.08,
     output: 0,
   },
 };
@@ -60,20 +60,20 @@ export function estimateRealtimeCost(usage) {
   );
 
   const textInputCost =
-    ((billableTokens(inputText + fallbackInput, cachedText) * GPT_REALTIME_2_PRICING.text.input) +
-      cachedText * GPT_REALTIME_2_PRICING.text.cachedInput) /
+    ((billableTokens(inputText + fallbackInput, cachedText) * GPT_REALTIME_2_1_MINI_PRICING.text.input) +
+      cachedText * GPT_REALTIME_2_1_MINI_PRICING.text.cachedInput) /
     PER_MILLION;
   const audioInputCost =
-    ((billableTokens(inputAudio, cachedAudio) * GPT_REALTIME_2_PRICING.audio.input) +
-      cachedAudio * GPT_REALTIME_2_PRICING.audio.cachedInput) /
+    ((billableTokens(inputAudio, cachedAudio) * GPT_REALTIME_2_1_MINI_PRICING.audio.input) +
+      cachedAudio * GPT_REALTIME_2_1_MINI_PRICING.audio.cachedInput) /
     PER_MILLION;
   const imageInputCost =
-    ((billableTokens(inputImage, cachedImage) * GPT_REALTIME_2_PRICING.image.input) +
-      cachedImage * GPT_REALTIME_2_PRICING.image.cachedInput) /
+    ((billableTokens(inputImage, cachedImage) * GPT_REALTIME_2_1_MINI_PRICING.image.input) +
+      cachedImage * GPT_REALTIME_2_1_MINI_PRICING.image.cachedInput) /
     PER_MILLION;
   const textOutputCost =
-    ((outputText + uncategorizedOutput) * GPT_REALTIME_2_PRICING.text.output) / PER_MILLION;
-  const audioOutputCost = (outputAudio * GPT_REALTIME_2_PRICING.audio.output) / PER_MILLION;
+    ((outputText + uncategorizedOutput) * GPT_REALTIME_2_1_MINI_PRICING.text.output) / PER_MILLION;
+  const audioOutputCost = (outputAudio * GPT_REALTIME_2_1_MINI_PRICING.audio.output) / PER_MILLION;
 
   const breakdown = {
     textInputCost,

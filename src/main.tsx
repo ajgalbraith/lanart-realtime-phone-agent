@@ -575,7 +575,7 @@ function App() {
           <TerminalSquare size={22} />
           <div>
             <h1>Lanart Realtime Lab</h1>
-            <span>{status?.model ?? "gpt-realtime-2"}</span>
+            <span>{status?.model ?? "gpt-realtime-2.1-mini"}</span>
           </div>
         </div>
         <div className="top-actions">

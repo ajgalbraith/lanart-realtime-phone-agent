@@ -13,7 +13,7 @@ import { callCloudTool, getCloudPublicTools, getCloudRealtimeTools, getCloudTool
 import { loadOpenAIKey, publicKeyStatus } from "./keyLoader.js";
 import { McpManager } from "./mcpManager.js";
 import { PhoneRealtimeBridge, registerAllowedPhoneCall } from "./phoneBridge.js";
-import { estimateRealtimeCost, estimateTranscriptionCost, GPT_REALTIME_2_PRICING, REALTIME_MODEL } from "./pricing.js";
+import { estimateRealtimeCost, estimateTranscriptionCost, GPT_REALTIME_2_1_MINI_PRICING, REALTIME_MODEL } from "./pricing.js";
 import {
   buildExternalUrl,
   getPhoneAgentPaths,
@@ -611,7 +611,7 @@ app.get("/api/status", (_req, res) => {
   const mcp = loadCodexMcpConfig();
   res.json({
     model: REALTIME_MODEL,
-    pricing: GPT_REALTIME_2_PRICING,
+    pricing: GPT_REALTIME_2_1_MINI_PRICING,
     openaiKey: publicKeyStatus(),
     codexConfigPath: mcp.configPath,
     mcpServers: mcp.servers,
