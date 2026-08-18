@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -687,6 +688,17 @@ function rejectTwiml(res) {
   sendTwiml(res, response);
 }
 
+function decodePhoneTask(value) {
+  const encoded = String(value || "").trim();
+  if (!encoded) return "";
+  if (encoded.length > 16_000) throw new Error("Encoded phone task is too long.");
+  const decoded = Buffer.from(encoded, "base64url").toString("utf8").trim();
+  if (!decoded || Buffer.byteLength(decoded, "utf8") > 12_000) {
+    throw new Error("Decoded phone task is empty or too long.");
+  }
+  return decoded;
+}
+
 app.post(["/voice", "/twilio/voice", `${getPhoneAgentPaths().voice}`], (req, res) => {
   const config = loadTwilioConfig();
   if (!config.accountSid || !config.authToken) {
@@ -715,7 +727,15 @@ app.post(["/voice", "/twilio/voice", `${getPhoneAgentPaths().voice}`], (req, res
     return;
   }
 
-  const sessionToken = registerAllowedPhoneCall({ callSid, from, to });
+  let instructions = "";
+  try {
+    instructions = decodePhoneTask(req.query?.task);
+  } catch (error) {
+    unavailableTwiml(res, error instanceof Error ? error.message : "The phone task is invalid.");
+    return;
+  }
+
+  const sessionToken = registerAllowedPhoneCall({ callSid, from, to, instructions });
   const response = new twilio.twiml.VoiceResponse();
   response.say({ voice: "alice" }, "Connecting your Codex agent.");
   const connect = response.connect();

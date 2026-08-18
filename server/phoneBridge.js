@@ -78,13 +78,14 @@ function cleanupPendingCalls() {
   }
 }
 
-export function registerAllowedPhoneCall({ callSid, from, to }) {
+export function registerAllowedPhoneCall({ callSid, from, to, instructions = "" }) {
   cleanupPendingCalls();
   const token = crypto.randomBytes(24).toString("hex");
   pendingCalls.set(callSid, {
     token,
     from,
     to,
+    instructions: String(instructions || "").trim(),
     expiresAt: Date.now() + CALL_TOKEN_TTL_MS,
   });
   return token;
@@ -93,7 +94,7 @@ export function registerAllowedPhoneCall({ callSid, from, to }) {
 function verifyAllowedPhoneCall({ callSid, token }) {
   cleanupPendingCalls();
   const entry = pendingCalls.get(callSid);
-  return Boolean(entry && entry.token === token);
+  return entry && entry.token === token ? entry : null;
 }
 
 function forgetAllowedPhoneCall(callSid) {
@@ -116,6 +117,7 @@ export class PhoneRealtimeBridge {
     this.costTotal = 0;
     this.responseActive = false;
     this.queuedResponse = null;
+    this.taskInstructions = "";
   }
 
   handleTwilioMessage(data) {
@@ -150,13 +152,15 @@ export class PhoneRealtimeBridge {
     const callSid = start.callSid || params.callSid;
     const token = params.sessionToken;
 
-    if (!callSid || !verifyAllowedPhoneCall({ callSid, token })) {
+    const allowedCall = callSid ? verifyAllowedPhoneCall({ callSid, token }) : null;
+    if (!allowedCall) {
       console.warn("[phone-agent] rejecting media stream with invalid call token");
       this.twilioWs.close(1008, "Unauthorized media stream");
       return;
     }
 
     this.verified = true;
+    this.taskInstructions = allowedCall.instructions;
     this.streamSid = start.streamSid || event.streamSid;
     this.callSid = callSid;
     debugPhone("twilio stream started", this.callSid, this.streamSid);
@@ -198,7 +202,7 @@ export class PhoneRealtimeBridge {
         session: {
           type: "realtime",
           model: REALTIME_MODEL,
-          instructions: phoneSystemInstructions(),
+          instructions: this.taskInstructions || phoneSystemInstructions(),
           output_modalities: ["audio"],
           max_output_tokens: 2048,
           audio: {
