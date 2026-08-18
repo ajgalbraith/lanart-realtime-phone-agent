@@ -163,6 +163,7 @@ export class PhoneRealtimeBridge {
     this.taskInstructions = allowedCall.instructions;
     this.streamSid = start.streamSid || event.streamSid;
     this.callSid = callSid;
+    console.log(`[phone-agent] task-specific instructions: ${this.taskInstructions ? "yes" : "no"}`);
     debugPhone("twilio stream started", this.callSid, this.streamSid);
     await this.startOpenAI();
   }
@@ -304,9 +305,7 @@ export class PhoneRealtimeBridge {
           );
         }
         if (transcript) {
-          this.createResponse(
-            "Respond concisely to the last IVR or human utterance. Follow the configured phone task exactly. During hold music, announcements that ask no question, or noise-only audio, remain completely silent.",
-          );
+          this.createResponse();
         }
         break;
       }
