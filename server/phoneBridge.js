@@ -305,7 +305,18 @@ export class PhoneRealtimeBridge {
           );
         }
         if (transcript) {
-          this.createResponse();
+          const normalized = transcript.toLowerCase();
+          if (/^(ok|okay)[.!]?$/i.test(transcript) ||
+              /thank you for (your )?patience|please (continue to )?hold|all (of )?our agents|hold music|your call is important/.test(normalized)) {
+            break;
+          }
+          const intentPrompt =
+            /few words|why (are )?you calling|reason for (your )?call|how can i help/.test(normalized);
+          this.createResponse(
+            intentPrompt
+              ? 'Reply with exactly this sentence and nothing else: "Add a pet to an existing reservation."'
+              : "Respond concisely to only the last IVR or human question. During hold music, announcements that ask no question, or noise-only audio, remain completely silent.",
+          );
         }
         break;
       }
@@ -393,11 +404,15 @@ export class PhoneRealtimeBridge {
       return;
     }
     this.responseActive = true;
+    const baseInstructions = this.taskInstructions || phoneSystemInstructions();
+    const responseInstructions = instructions
+      ? `${baseInstructions}\n\nImmediate turn instruction:\n${instructions}`
+      : baseInstructions;
     this.sendOpenAI({
       type: "response.create",
       response: {
         output_modalities: ["audio"],
-        instructions,
+        instructions: responseInstructions,
         audio: {
           output: {
             format: { type: "audio/pcmu" },
