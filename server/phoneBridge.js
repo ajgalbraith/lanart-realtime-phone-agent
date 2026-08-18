@@ -71,6 +71,47 @@ function debugPhone(...args) {
   if (DEBUG_PHONE) console.log("[phone-agent]", ...args);
 }
 
+function extractConfirmationCode(instructions) {
+  const match = String(instructions || "").match(/confirmation(?: number| code)?(?: is|:)?\s+([A-Z0-9]{6})\b/i);
+  return match?.[1]?.toUpperCase() || "";
+}
+
+function spellConfirmationCode(code) {
+  return code.split("").map((character) => (/\d/.test(character) ? character : character.toUpperCase())).join(" ");
+}
+
+function deterministicIvrInstruction(transcript, taskInstructions, previousTranscript) {
+  const normalized = transcript.toLowerCase();
+  const previous = String(previousTranscript || "").toLowerCase();
+  const confirmationCode = extractConfirmationCode(taskInstructions);
+
+  if (/few words|why (are )?you calling|reason for (your )?call|how can i help/.test(normalized)) {
+    return 'Reply with exactly this sentence and nothing else: "Add a pet to an existing reservation."';
+  }
+  if (/can i send you a text|send (you )?(a )?text/.test(normalized)) {
+    return 'Reply with exactly one word: "No."';
+  }
+  if (/specific reservation that you already have|calling about (a )?specific reservation/.test(normalized)) {
+    return 'Reply with exactly one word: "Yes."';
+  }
+  if (/traveling entirely within the united states|travel entirely within the united states/.test(normalized)) {
+    const canadaTrip = /\b(yul|montreal|montr[eé]al|canada)\b/i.test(taskInstructions);
+    return `Reply with exactly one word: "${canadaTrip ? "No" : "Yes"}."`;
+  }
+  if (confirmationCode && (/what(?:'s| is) (?:your|the) confirmation|confirmation (?:number|code)/.test(normalized) ||
+      (/sorry|didn.t|get that|try again|repeat/.test(normalized) && /confirmation/.test(previous)))) {
+    return `Reply with only the confirmation code, slowly and distinctly: "${spellConfirmationCode(confirmationCode)}."`;
+  }
+  if (/please say (only )?yes or no/.test(normalized)) {
+    if (/specific reservation/.test(previous)) return 'Reply with exactly one word: "Yes."';
+    if (/entirely within the united states/.test(previous)) {
+      const canadaTrip = /\b(yul|montreal|montr[eé]al|canada)\b/i.test(taskInstructions);
+      return `Reply with exactly one word: "${canadaTrip ? "No" : "Yes"}."`;
+    }
+  }
+  return "";
+}
+
 function cleanupPendingCalls() {
   const now = Date.now();
   for (const [callSid, entry] of pendingCalls) {
@@ -118,6 +159,7 @@ export class PhoneRealtimeBridge {
     this.responseActive = false;
     this.queuedResponse = null;
     this.taskInstructions = "";
+    this.lastCallerTranscript = "";
   }
 
   handleTwilioMessage(data) {
@@ -310,11 +352,15 @@ export class PhoneRealtimeBridge {
               /thank you for (your )?patience|please (continue to )?hold|all (of )?our agents|hold music|your call is important/.test(normalized)) {
             break;
           }
-          const intentPrompt =
-            /few words|why (are )?you calling|reason for (your )?call|how can i help/.test(normalized);
+          const deterministicInstruction = deterministicIvrInstruction(
+            transcript,
+            this.taskInstructions,
+            this.lastCallerTranscript,
+          );
+          this.lastCallerTranscript = transcript;
           this.createResponse(
-            intentPrompt
-              ? 'Reply with exactly this sentence and nothing else: "Add a pet to an existing reservation."'
+            deterministicInstruction
+              ? deterministicInstruction
               : "Respond concisely to only the last IVR or human question. During hold music, announcements that ask no question, or noise-only audio, remain completely silent.",
           );
         }
