@@ -15,7 +15,7 @@ const DEBUG_PHONE = process.env.DEBUG_PHONE_AGENT === "1";
 
 const pendingCalls = new Map();
 
-const PHONE_SYSTEM_INSTRUCTIONS = `You are James Galbraith's private phone-call Codex agent.
+const DEFAULT_PHONE_SYSTEM_INSTRUCTIONS = `You are James Galbraith's private phone-call Codex agent.
 
 You are speaking on a Twilio phone call. Keep spoken responses concise, natural, and action-oriented. Use MCP tools for live lookups when useful, but keep tool use narrow.
 
@@ -34,6 +34,11 @@ Vice President, Lanart Rug Inc
 300 Rue Saint-Louis, Saint-Jean-sur-Richelieu, QC J3B 1Y4, Canada
 Phone: +1-438-787-0109
 Email: james@lanartrug.com`;
+
+function phoneSystemInstructions() {
+  const taskInstructions = String(process.env.PHONE_AGENT_INSTRUCTIONS || "").trim();
+  return taskInstructions || DEFAULT_PHONE_SYSTEM_INSTRUCTIONS;
+}
 
 function safetyIdentifier() {
   const raw = `${os.userInfo().username}:${os.hostname()}:lanart-realtime-phone-agent`;
@@ -193,7 +198,7 @@ export class PhoneRealtimeBridge {
         session: {
           type: "realtime",
           model: REALTIME_MODEL,
-          instructions: PHONE_SYSTEM_INSTRUCTIONS,
+          instructions: phoneSystemInstructions(),
           output_modalities: ["audio"],
           max_output_tokens: 2048,
           audio: {
@@ -209,7 +214,7 @@ export class PhoneRealtimeBridge {
                 threshold: 0.5,
                 prefix_padding_ms: 300,
                 silence_duration_ms: 650,
-                create_response: true,
+                create_response: false,
                 interrupt_response: true,
               },
             },
@@ -284,6 +289,8 @@ export class PhoneRealtimeBridge {
         this.clearTwilioAudio();
         break;
       case "conversation.item.input_audio_transcription.completed": {
+        const transcript = String(event.transcript || "").trim();
+        if (transcript) console.log(`[call-transcript][Caller] ${transcript}`);
         const usage = event.usage;
         const cost = estimateTranscriptionCost(usage);
         this.costTotal += cost.usd;
@@ -292,8 +299,17 @@ export class PhoneRealtimeBridge {
             `[phone-agent] ${this.callSid ?? "call"} transcription cost $${cost.usd.toFixed(6)} total $${this.costTotal.toFixed(6)}`,
           );
         }
+        if (transcript) {
+          this.createResponse(
+            "Respond concisely to the last IVR or human utterance. Follow the configured phone task exactly. During hold music, announcements that ask no question, or noise-only audio, remain completely silent.",
+          );
+        }
         break;
       }
+      case "response.output_audio_transcript.done":
+      case "response.audio_transcript.done":
+        console.log(`[call-transcript][Assistant] ${String(event.transcript || "").trim()}`);
+        break;
       case "response.function_call_arguments.done":
         await this.handleFunctionCall({
           callId: event.call_id,
