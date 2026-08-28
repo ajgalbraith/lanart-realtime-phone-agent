@@ -132,7 +132,7 @@ function buildEnvVars() {
     TWILIO_ACCOUNT_SID: twilio.accountSid,
     TWILIO_AUTH_TOKEN: twilio.authToken,
     TWILIO_FROM_NUMBER: twilio.fromNumber,
-    PHONE_AGENT_NUMBER: "+14388120333",
+    PHONE_AGENT_NUMBER: "+14387938710",
     PHONE_AGENT_ALLOWED_FROM: "+14387870109",
     PHONE_AGENT_PUBLIC_BASE_URL: SERVICE_URL,
     PHONE_AGENT_MCP_SERVERS: "render,retell",

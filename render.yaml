@@ -15,6 +15,6 @@ services:
       - key: PHONE_AGENT_ALLOWED_FROM
         value: "+14387870109"
       - key: PHONE_AGENT_NUMBER
-        value: "+14388120333"
+        value: "+14387938710"
       - key: PHONE_AGENT_MCP_SERVERS
         value: workspace-mcp,google-workspace-email,google-workspace,meta_ads_mcp,whatsapp,macos-contacts,quickbooks_lanart,shopify,shipstation,twilio-local
